@@ -35,3 +35,16 @@ Set the Supabase Auth Site URL and redirect URL to the deployed domain so confir
 
 - Site URL: `https://<domain>`
 - Redirect URL: `https://<domain>/auth/callback`
+
+### Custom domain (x1knows.com, registered at Hostinger)
+
+1. In Vercel, open the project, go to **Settings → Domains**, and add `x1knows.com` and `www.x1knows.com`.
+2. In Hostinger, open **Domains → x1knows.com → DNS / Nameservers → DNS records**:
+   - Delete the existing `A` records for `@` and `www`.
+   - Add `A`, name `@`, pointing to `76.76.21.21`.
+   - Add `CNAME`, name `www`, pointing to `cname.vercel-dns.com`.
+   - If Vercel's Domains page shows different values, use those.
+3. Set `NEXT_PUBLIC_SITE_URL=https://x1knows.com` in Vercel, then redeploy.
+4. In Supabase, open **Authentication → URL Configuration**. Set Site URL to `https://x1knows.com` and add `https://x1knows.com/auth/callback` as a redirect URL.
+
+To keep an existing site on the root domain, use a subdomain instead. For example, add `audit.x1knows.com` in Vercel, then add `CNAME audit cname.vercel-dns.com` in Hostinger.
