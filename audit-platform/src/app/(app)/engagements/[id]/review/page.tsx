@@ -5,6 +5,8 @@ import { dmy } from "@/lib/export/format";
 import { ActionForm, Submit } from "@/components/action-form";
 import { SignoffForm } from "@/components/signoff-form";
 import { Badge, EmptyState, Section, when } from "@/components/ui";
+import { QualityPanel } from "@/components/quality-panel";
+import { qualityChecks, qualityBlockers } from "@/lib/audit/quality";
 import { raisePoint, respondPoint, clearPoint } from "./actions";
 
 export const metadata = { title: "Review and sign-off" };
@@ -23,10 +25,20 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   const points = b.reviewPoints;
   const signedStages = new Set(b.signoffs.map((s) => s.stage));
   const iSigned = b.signoffs.some((s) => s.signed_by === profile.id);
+  const checks = qualityChecks(b);
+  const critical = qualityBlockers(checks);
+  const warnings = checks.filter((c) => c.severity === "warning" && !c.passed);
 
   return (
     <div className="grid gap-x-12 xl:grid-cols-[1fr_420px]">
       <div className="min-w-0">
+        <Section
+          title="Quality checklist"
+          description={critical.length ? `${critical.length} critical item(s) must pass before anyone can sign off. ${warnings.length} warning(s) to resolve or explain.` : `No critical failures. ${warnings.length} warning(s) to resolve or explain in a review point.`}
+        >
+          <QualityPanel checks={checks} />
+          <p className="mt-2 text-xs text-ink-3">Each check targets a weakness regulators repeatedly find on inspection. Sources are listed in the Training centre.</p>
+        </Section>
         <Section title="Review points" description={`${points.filter((p) => p.status === "open").length} open · ${points.filter((p) => p.status === "responded").length} responded · ${points.filter((p) => p.status === "cleared").length} cleared. The partner cannot sign until every point is cleared.`}>
           {points.length === 0 ? <EmptyState title="No review points" /> : (
             <ol className="flex flex-col gap-3">

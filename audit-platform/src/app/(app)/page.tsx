@@ -5,12 +5,13 @@ import { currentStage, STAGES } from "@/lib/stage";
 import { Badge, EmptyState, LinkButton, PageHeader, Section, day, when } from "@/components/ui";
 import type { AuditLogRow, DocumentRow, PipelineRun, SignoffRow } from "@/lib/db-types";
 import { describeEvent } from "@/lib/events";
+import { MODULES } from "@/lib/training";
 
 export const metadata = { title: "Dashboard" };
 
 export default async function Dashboard() {
   const { supabase, profile } = await requireStaff();
-  const [eng, docs, runs, signs, rps, tb, adj, log] = await Promise.all([
+  const [eng, docs, runs, signs, rps, tb, adj, log, training] = await Promise.all([
     supabase.from("engagements").select("id, fy_end, status, reporting_deadline, preparer_id, reviewer_id, partner_id, clients(name)").neq("status", "locked").order("reporting_deadline", { ascending: true, nullsFirst: false }),
     supabase.from("documents").select("id, engagement_id, kind, status, filename, uploaded_by"),
     supabase.from("pipeline_runs").select("engagement_id, step, status, started_at").order("started_at", { ascending: false }),
@@ -19,7 +20,10 @@ export default async function Dashboard() {
     supabase.from("tb_lines").select("engagement_id, verified_by, fs_caption"),
     supabase.from("adjustments").select("engagement_id, status"),
     supabase.from("audit_log").select("*").order("id", { ascending: false }).limit(12),
+    supabase.from("training_records").select("module_id, module_version").eq("staff_id", profile.id).eq("passed", true),
   ]);
+  const passedMods = new Set(((training.data ?? []) as { module_id: string; module_version: number }[]).map((t) => `${t.module_id}@${t.module_version}`));
+  const coreDue = MODULES.filter((m) => m.core && !passedMods.has(`${m.id}@${m.version}`));
   type EngRow = { id: string; fy_end: string; status: string; reporting_deadline: string | null; preparer_id: string | null; reviewer_id: string | null; partner_id: string | null; clients: { name: string } | null };
   const engagements = (eng.data ?? []) as unknown as EngRow[];
   const by = <T extends { engagement_id: string }>(rows: T[] | null, id: string) => (rows ?? []).filter((r) => r.engagement_id === id);
@@ -92,6 +96,11 @@ export default async function Dashboard() {
           )}
         </div>
         <div className="mt-8 flex flex-col xl:mt-0">
+          {coreDue.length ? (
+            <Section title="Training due" actions={<Link href="/training" className="text-sm text-accent hover:underline">Open</Link>}>
+              <p className="text-sm text-ink-2">{coreDue.length} core module(s) to complete: {coreDue.map((m) => m.title).join("; ")}.</p>
+            </Section>
+          ) : null}
           <Section title="Needs your signature">
             {myUnsigned.length === 0 && reviewQueue.length === 0 ? (
               <p className="text-sm text-ink-3">Nothing waiting for you.</p>

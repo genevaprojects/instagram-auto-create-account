@@ -65,7 +65,7 @@ function docFooter(b: Bundle, label: string) {
 
 /** AA2: Index - Current Audit File, in the firm's layout, with enhanced sections marked. */
 export async function buildIndexDocx(b: Bundle): Promise<Buffer> {
-  const present = new Set<string>(["AA", "AB", "DA3", "DB", "DC", "DD", "BB", ...b.papers.map((p) => p.ref), ...(b.etb?.rows.map((r) => r.wp_ref) ?? [])]);
+  const present = new Set<string>(["AA", "AB", "DA3", "DB", "DC", "DD", "BB", "QC", ...b.papers.map((p) => p.ref), ...(b.etb?.rows.map((r) => r.wp_ref) ?? [])]);
   const entries = WP_INDEX.filter((e) => present.has(e.ref));
   const cell = (t: string, bold = false, w = 15) =>
     new TableCell({ width: { size: w, type: WidthType.PERCENTAGE }, children: [para([run(t, { bold })], { spacingAfter: 40 })] });

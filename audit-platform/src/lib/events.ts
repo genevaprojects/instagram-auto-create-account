@@ -13,6 +13,7 @@ const TABLE_NOUN: Record<string, string> = {
   staff_allowlist: "staff list entry",
   profiles: "staff profile",
   pipeline_runs: "AI run",
+  training_records: "training record",
 };
 
 /** One human sentence for an audit-trail row. */
@@ -38,6 +39,7 @@ export function describeEvent(l: AuditLogRow): string {
   }
   const [table, op] = l.action.split(".");
   const noun = TABLE_NOUN[table] ?? table;
+  if (table === "training_records" && op === "insert") return `${row.passed ? "passed" : "attempted"} training module "${row.module_id}" (${row.score}/${row.total})`;
   if (op === "insert") return `created ${noun}${row.ref ? ` ${row.ref}` : row.name ? ` ${row.name}` : row.email ? ` ${row.email}` : ""}`;
   if (op === "delete") return `removed ${noun}${row.ref ? ` ${row.ref}` : ""}`;
   if (op === "update") {

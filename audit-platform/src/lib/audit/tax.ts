@@ -5,7 +5,8 @@ import { type Cents } from "./money";
  * them when the Finance Act changes; every computation is flagged for reviewer sign-off.
  * SME scale: first RM150,000 at 15%, next RM450,000 at 17%, remainder at 24%
  * (for resident companies with paid-up capital <= RM2.5m, gross business income <= RM50m,
- * and not more than 20% held by a foreign company). Standard rate: 24%.
+ * and, from YA 2024, not more than 20% held by foreign companies or non-Malaysian citizens).
+ * Standard rate: 24%.
  */
 export const TAX_SCALES = {
   sme: [

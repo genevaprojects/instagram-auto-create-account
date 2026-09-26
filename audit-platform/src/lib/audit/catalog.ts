@@ -69,6 +69,7 @@ export const WP_INDEX: IndexEntry[] = [
   { ref: "BB", title: "Summary of audit differences", section: "Completion", firm: false },
   { ref: "BC", title: "Management representation letter", section: "Completion", firm: true },
   { ref: "BD", title: "Going concern and subsequent events", section: "Completion", firm: false },
+  { ref: "QC", title: "Pre-sign-off quality checklist", section: "Completion", firm: false },
   { ref: "DA", title: "Financial statements", section: "Financial statements", firm: true },
   { ref: "DA3", title: "Test of opening balances", section: "Financial statements", firm: true },
   { ref: "DB", title: "Client management account (working BS and P&L)", section: "Financial statements", firm: true },

@@ -119,6 +119,8 @@ export const PapersResult = z.object({
       conclusion: z.string(),
       tickmarks_supported: z.array(z.string()),
       outstanding: z.array(z.string()),
+      risks_addressed: z.array(z.string()),
+      sampling_basis: z.string().nullable(),
     }),
   ),
   completion: z.object({

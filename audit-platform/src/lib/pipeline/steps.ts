@@ -10,6 +10,7 @@ import {
 import { GROUP_NORMAL_SIGN, LEAD_REFS, indexTitle, type FsGroup } from "../audit/catalog";
 import { fromCents, toCents, formatRM, sum } from "../audit/money";
 import { adjustmentBalances } from "../audit/etb";
+import { programmesText } from "../audit/programmes";
 import { taxOnChargeableIncome } from "../audit/tax";
 import { loadBundle, adjustmentToInput, latestRun, type Bundle } from "./bundle";
 import { downloadVerified, toContentBlocks, loadDocs, IntegrityError } from "./documents";
@@ -391,6 +392,7 @@ async function stepPapers(supabase: SupabaseClient, b: Bundle): Promise<StepOutc
         `Going concern, subsequent events, related parties (BD): ${JSON.stringify(bd)}`,
         `Opening balance test (DA3): ${JSON.stringify(b.settings.opening_balance_test ?? null)}`,
         `Lead schedules required: ${leadRefs.join(", ")}`,
+        `FIRM STANDARD AUDIT PROGRAMMES (tailor to this client):\n${programmesText(leadRefs)}`,
         `Uploaded evidence on file: ${b.documents.filter((d) => d.status === "signed").map((d) => `${d.filename} [${d.kind}]`).join("; ")}`,
       ].join("\n\n"),
     },

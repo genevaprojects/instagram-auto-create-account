@@ -1,4 +1,4 @@
-import { LayoutDashboard, FolderOpen, Building2, ScrollText, Users, UserRound, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, FolderOpen, Building2, ScrollText, Users, UserRound, LogOut, ShieldCheck, GraduationCap } from "lucide-react";
 import { requireStaff, hasRole, ROLE_LABEL } from "@/lib/session";
 import { NavLink } from "@/components/nav-link";
 import { IdleTimeout } from "@/components/idle-timeout";
@@ -23,6 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/" exact><LayoutDashboard className={icon} aria-hidden />Dashboard</NavLink>
           <NavLink href="/engagements"><FolderOpen className={icon} aria-hidden />Engagements</NavLink>
           <NavLink href="/clients"><Building2 className={icon} aria-hidden />Clients</NavLink>
+          <NavLink href="/training"><GraduationCap className={icon} aria-hidden />Training</NavLink>
           <NavLink href="/activity"><ScrollText className={icon} aria-hidden />Audit trail</NavLink>
           {hasRole(profile, ["admin", "partner"]) ? <NavLink href="/staff"><Users className={icon} aria-hidden />Staff access</NavLink> : null}
         </nav>

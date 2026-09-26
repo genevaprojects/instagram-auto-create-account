@@ -6,6 +6,7 @@ import { loadBundle, latestRun } from "@/lib/pipeline/bundle";
 import { snapshotHash } from "@/lib/snapshot";
 import { signoffStatement } from "@/lib/declarations";
 import { dmy } from "@/lib/export/format";
+import { qualityChecks, qualityBlockers } from "@/lib/audit/quality";
 
 type Stage = "preparer" | "reviewer" | "partner";
 
@@ -32,6 +33,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (stage !== "preparer" && b.papers.some((p) => p.status !== "reviewed")) blockers.push(`Every working paper must be reviewed first (${b.papers.filter((p) => p.status !== "reviewed").map((p) => p.ref).join(", ")}).`);
   if (stage === "reviewer" && b.reviewPoints.some((r) => r.status === "open")) blockers.push("Some review points have no response yet.");
   if (stage === "partner" && b.reviewPoints.some((r) => r.status !== "cleared")) blockers.push("Every review point must be cleared.");
+  const qc = qualityBlockers(qualityChecks(b));
+  if (qc.length) blockers.push(`Quality checklist: ${qc.length} critical item(s) fail (${qc.map((q) => q.title).join("; ")}).`);
   if (blockers.length) return NextResponse.json({ error: blockers.join(" ") }, { status: 409 });
 
   if (!body.agree) return NextResponse.json({ error: "Tick the statement to sign." }, { status: 400 });

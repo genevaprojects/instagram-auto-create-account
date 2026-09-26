@@ -7,6 +7,7 @@ import { fromCents, toCents, sum } from "../audit/money";
 import { FIRM_BANDS } from "../audit/materiality";
 import type { EtbRow } from "../audit/etb";
 import { dmy, periodLabel } from "./format";
+import { qualityChecks } from "../audit/quality";
 
 /* ------------------------------------------------------------------ styling */
 const FONT = "Arial";
@@ -134,7 +135,7 @@ function sheetIndex(ctx: Ctx, ws: Ws) {
   const hdr = ["REF", "DESCRIPTIONS", "STATUS", "PREPARED", "DATE", "REVIEWED", "DATE", "SOURCE"];
   hdr.forEach((h, i) => set(ws, `${String.fromCharCode(65 + i)}6`, h, { bold: true }));
   ws.getRow(6).eachCell((c) => (c.border = { bottom: thin }));
-  const present = new Set<string>(["AB", "DA3", "DB", "DC", "DD", "BB", ...ctx.b.papers.map((p) => p.ref), ...(ctx.b.etb?.rows.map((r) => r.wp_ref) ?? [])]);
+  const present = new Set<string>(["AB", "DA3", "DB", "DC", "DD", "BB", "QC", ...ctx.b.papers.map((p) => p.ref), ...(ctx.b.etb?.rows.map((r) => r.wp_ref) ?? [])]);
   let r = 7;
   for (const e of WP_INDEX.filter((x) => present.has(x.ref) || x.ref === "AA")) {
     const p = ctx.b.papers.find((x) => x.ref === e.ref);
@@ -667,6 +668,7 @@ function sheetLead(ctx: Ctx, ws: Ws, ref: string) {
   const rows = etb.rows.filter((r) => r.wp_ref === ref);
   const c = (ctx.b.papers.find((p) => p.ref === ref)?.content ?? {}) as {
     objective?: string[]; source?: string; scope?: string; procedures?: string[]; observations?: string[]; conclusion?: string; tickmarks_supported?: string[]; outstanding?: string[];
+    risks_addressed?: string[]; sampling_basis?: string | null;
   };
   widths(ws, [16, 2, 30, 14, 9, 16, 16, 16, 16, 12, 12, 10]);
   header(ctx, ws, ref, indexTitle(ref), paperWho(ctx, ref));
@@ -724,7 +726,9 @@ function sheetLead(ctx: Ctx, ws: Ws, ref: string) {
   if (hasPy) tick(ws, `I${r}`, "f,#");
   set(ws, `H${r + 1}`, PL_GROUPS.includes(rows[0]?.fs_group) ? "<DB-2>" : "<DB-1>", { color: "FF1F4E79", align: "center" });
   r += 3;
+  if (c.risks_addressed?.length) r = textBlock(ws, r, "RISKS ADDRESSED <AC>", c.risks_addressed);
   r = textBlock(ws, r, "PROCEDURES", c.procedures ?? ["To be drafted."]);
+  if (c.sampling_basis) r = textBlock(ws, r, "SAMPLING", c.sampling_basis);
   r = textBlock(ws, r, "OBSERVATIONS", c.observations ?? [""]);
   if (c.outstanding?.length) r = textBlock(ws, r, "OUTSTANDING", c.outstanding);
   r = textBlock(ws, r, "CONCLUSION", c.conclusion ?? "Pending.");
@@ -790,6 +794,26 @@ function sheetM4(ctx: Ctx, ws: Ws) {
 }
 
 /* ------------------------------------------------------------------ review points & trail */
+function sheetQC(ctx: Ctx, ws: Ws) {
+  widths(ws, [5, 16, 50, 11, 9, 60, 30]);
+  header(ctx, ws, "QC", "Pre-sign-off quality checklist");
+  ["No", "Area", "Check", "Severity", "Result", "Detail", "Standard"].forEach((x, i) => set(ws, `${String.fromCharCode(65 + i)}6`, x, { bold: true }));
+  let r = 7;
+  qualityChecks(ctx.b).forEach((q, i) => {
+    set(ws, `A${r}`, i + 1);
+    set(ws, `B${r}`, q.area);
+    set(ws, `C${r}`, q.title, { wrap: true });
+    set(ws, `D${r}`, q.severity);
+    set(ws, `E${r}`, q.severity === "info" ? "Note" : q.passed ? "Pass" : "Fail", { bold: !q.passed, color: q.passed || q.severity === "info" ? "FF0F5E4A" : "FFC00000" });
+    set(ws, `F${r}`, q.detail, { wrap: true });
+    set(ws, `G${r}`, q.standard, { wrap: true, size: 9 });
+    ws.getRow(r).height = Math.max(15, Math.ceil(Math.max(q.detail.length / 70, q.title.length / 55)) * 13);
+    r++;
+  });
+  r++;
+  textBlock(ws, r, "NOTE", "Critical checks must pass before any engagement sign-off is accepted by the platform. Warnings must be read and resolved or explained on the review points sheet <RP>.", "G");
+}
+
 function sheetRP(ctx: Ctx, ws: Ws) {
   widths(ws, [5, 8, 60, 10, 12, 50, 12]);
   header(ctx, ws, "RP", "Review points");
@@ -868,8 +892,8 @@ export async function buildAwpWorkbook(b: Bundle, firmName: string): Promise<Buf
 
   // Create sheets in index order; fill in dependency order
   const leadRefs = WP_INDEX.filter((e) => (e.section === "Balance sheet" || e.section === "Income statement") && b.etb!.rows.some((r) => r.wp_ref === e.ref)).map((e) => e.ref);
-  const order = ["INDEX", "AB2", "AC", "BA", "BB", "BD", "DA3", "DB-1", "DB-2", "DC1", "DC2", "DD", "DE", ...leadRefs.flatMap((r) => (r === "M" ? ["M", "M4"] : [r])), "RP", "TRAIL"];
-  if (!leadRefs.includes("M")) order.splice(order.indexOf("RP"), 0, "M4");
+  const order = ["INDEX", "AB2", "AC", "BA", "BB", "BD", "DA3", "DB-1", "DB-2", "DC1", "DC2", "DD", "DE", ...leadRefs.flatMap((r) => (r === "M" ? ["M", "M4"] : [r])), "QC", "RP", "TRAIL"];
+  if (!leadRefs.includes("M")) order.splice(order.indexOf("QC"), 0, "M4");
   const sheets = new Map(order.map((n) => [n, wb.addWorksheet(n, { properties: { tabColor: { argb: WP_INDEX.find((e) => e.ref === n)?.firm === false ? "FF1F4E79" : "FF0F5E4A" } } })]));
   const S = (n: string) => sheets.get(n)!;
 
@@ -902,6 +926,7 @@ export async function buildAwpWorkbook(b: Bundle, firmName: string): Promise<Buf
   sheetDE(ctx, S("DE"));
   for (const ref of leadRefs) sheetLead(ctx, S(ref), ref);
   sheetM4(ctx, S("M4"));
+  sheetQC(ctx, S("QC"));
   sheetRP(ctx, S("RP"));
   sheetTrail(ctx, S("TRAIL"));
 

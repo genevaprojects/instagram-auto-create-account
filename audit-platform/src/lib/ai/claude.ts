@@ -3,8 +3,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { FIRM_CONSTITUTION } from "./prompts";
 
-/** Model is configurable; defaults to Claude Opus 5. */
-export const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+/**
+ * Model is configurable; defaults to Claude Opus 5.5.
+ * Opus 5.5 always thinks (effort is the only control) and defaults to effort "medium",
+ * so effort is always sent explicitly. Audit work runs at "high".
+ */
+export const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 export const AI_EFFORT = (process.env.ANTHROPIC_EFFORT as "low" | "medium" | "high" | "xhigh" | "max" | undefined) || "high";
 
 export class AiError extends Error {
