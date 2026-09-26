@@ -27,7 +27,28 @@ npx tsx --conditions=react-server tests/export.test.ts       # builds the workbo
 
 The SQL in `supabase/migrations` has been applied to project `mexyzyoyhyigrkposhmu`. The firm owner's email was seeded as the first partner. Sign up with it at `/signup`, then add staff on the Staff access page.
 
-## Deploy (Vercel)
+## Deploy (Netlify, production at x1knows.com)
+
+The Netlify project is `x1knows` (team genevaprojects). `netlify.toml` at the repository root sets the base directory (`audit-platform`), the build command and the functions directory.
+
+1. **Link the repository (once).** In Netlify, open **x1knows → Project configuration → Build & deploy → Link repository**. Choose GitHub → `genevaprojects/instagram-auto-create-account`, then pick the production branch. After that, every push deploys.
+2. **Environment variables.** These are already set on the project:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - `ANTHROPIC_MODEL`, `ANTHROPIC_EFFORT`
+   - `NEXT_PUBLIC_SITE_URL`
+   - `PIPELINE_MODE=background`
+   - `PIPELINE_JOB_SECRET` (secret)
+
+   Add `ANTHROPIC_API_KEY` as a secret, and `FIRM_NAME`.
+3. **Domain.** Under **Domain management → Add a domain**, add `x1knows.com`. Hostinger DNS already points at Netlify. If Netlify reports the domain is attached to another project, remove it there first.
+4. **Supabase Auth.** Under **Authentication → URL Configuration**, set Site URL to `https://x1knows.com` and add `https://x1knows.com/auth/callback` as a redirect URL.
+
+**Why background functions.** Netlify ends a normal request after about a minute. A step on Claude Opus 5.5 at high effort can take several minutes. So on Netlify the API route validates the step, records it as running, and hands it to `netlify/functions/pipeline-background.mts`, which can run for up to 15 minutes. The browser polls until the step finishes.
+
+The hand-off is signed with `PIPELINE_JOB_SECRET` and expires after 2 minutes. The worker acts as the staff member who started the step, using their forwarded access token, so row-level security, the audit trail and the "started by" name are unchanged. A step still running after 16 minutes is shown as failed and can be run again.
+
+## Deploy (Vercel, alternative)
 
 Root directory: `audit-platform`. Environment variables are listed in `.env.example`.
 
@@ -36,15 +57,4 @@ Set the Supabase Auth Site URL and redirect URL to the deployed domain so confir
 - Site URL: `https://<domain>`
 - Redirect URL: `https://<domain>/auth/callback`
 
-### Custom domain (x1knows.com, registered at Hostinger)
-
-1. In Vercel, open the project, go to **Settings → Domains**, and add `x1knows.com` and `www.x1knows.com`.
-2. In Hostinger, open **Domains → x1knows.com → DNS / Nameservers → DNS records**:
-   - Delete the existing `A` records for `@` and `www`.
-   - Add `A`, name `@`, pointing to `76.76.21.21`.
-   - Add `CNAME`, name `www`, pointing to `cname.vercel-dns.com`.
-   - If Vercel's Domains page shows different values, use those.
-3. Set `NEXT_PUBLIC_SITE_URL=https://x1knows.com` in Vercel, then redeploy.
-4. In Supabase, open **Authentication → URL Configuration**. Set Site URL to `https://x1knows.com` and add `https://x1knows.com/auth/callback` as a redirect URL.
-
-To keep an existing site on the root domain, use a subdomain instead. For example, add `audit.x1knows.com` in Vercel, then add `CNAME audit cname.vercel-dns.com` in Hostinger.
+On Vercel, steps run inline, within the 300-second route limit. Leave `PIPELINE_MODE` unset.

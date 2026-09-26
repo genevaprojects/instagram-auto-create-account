@@ -1,4 +1,3 @@
-import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DocumentRow, PipelineStep, Profile } from "../db-types";
 import { callStructured, AiError, AI_MODEL, type AiUsage, type ContentBlock } from "../ai/claude";
@@ -14,7 +13,8 @@ import { programmesText } from "../audit/programmes";
 import { taxOnChargeableIncome } from "../audit/tax";
 import { loadBundle, adjustmentToInput, latestRun, type Bundle } from "./bundle";
 import { downloadVerified, toContentBlocks, loadDocs, IntegrityError } from "./documents";
-import { logEvent } from "../session";
+import { writeEvent, type RequestMeta } from "../audit-log";
+import { isStale } from "./run-status";
 
 export class PipelineBlocked extends Error {}
 
@@ -420,10 +420,16 @@ async function stepPapers(supabase: SupabaseClient, b: Bundle): Promise<StepOutc
 
 // ---------------------------------------------------------------------------
 
-export async function runStep(supabase: SupabaseClient, engagementId: string, step: PipelineStep, actor: Profile) {
+/**
+ * Validate that a step may run and record it as running. Returns the run id; the work
+ * itself is done by executeRun, inline (runStep) or in a background function.
+ */
+export async function startRun(supabase: SupabaseClient, engagementId: string, step: PipelineStep): Promise<string> {
   const b = await loadBundle(supabase, engagementId);
   if (!b) throw new PipelineBlocked("Engagement not found.");
   if (b.engagement.status === "locked") throw new PipelineBlocked("This engagement is locked after partner sign-off.");
+  const busy = b.runs.find((r) => r.status === "running" && !isStale(r));
+  if (busy) throw new PipelineBlocked(`Step "${busy.step}" is still running on this engagement. Wait for it to finish.`);
   const req = REQUIRES[step];
   if (req) {
     const prev = latestRun(b, req);
@@ -437,10 +443,24 @@ export async function runStep(supabase: SupabaseClient, engagementId: string, st
     .select("id")
     .single<{ id: string }>();
   if (error || !run) throw new Error(error?.message ?? "Could not start run");
+  return run.id;
+}
 
+/** Do the work for a run created by startRun, then record the outcome and the audit event. */
+export async function executeRun(
+  supabase: SupabaseClient,
+  runId: string,
+  engagementId: string,
+  step: PipelineStep,
+  actor: Profile,
+  meta: RequestMeta,
+) {
   try {
+    const b = await loadBundle(supabase, engagementId);
+    if (!b) throw new PipelineBlocked("Engagement not found.");
+    if (b.engagement.status === "locked") throw new PipelineBlocked("This engagement is locked after partner sign-off.");
     let outcome: StepOutcome;
-    if (step === "extract") outcome = await stepExtract(supabase, b, run.id);
+    if (step === "extract") outcome = await stepExtract(supabase, b, runId);
     else if (step === "map") outcome = await stepMap(supabase, b);
     else if (step === "adjust") outcome = await stepAdjust(supabase, b, actor);
     else if (step === "analyse") outcome = await stepAnalyse(supabase, b);
@@ -451,14 +471,20 @@ export async function runStep(supabase: SupabaseClient, engagementId: string, st
     await supabase
       .from("pipeline_runs")
       .update({ status: outcome.status, finished_at: new Date().toISOString(), summary: outcome.summary, output: outcome.output, input_tokens: inTok, output_tokens: outTok, model: outcome.usage[0]?.model ?? AI_MODEL })
-      .eq("id", run.id);
+      .eq("id", runId);
     if (b.engagement.status === "planning") await supabase.from("engagements").update({ status: "fieldwork" }).eq("id", engagementId);
-    await logEvent(supabase, `pipeline.${step}`, { entityType: "pipeline_runs", entityId: run.id, engagementId, details: { status: outcome.status, summary: outcome.summary, input_tokens: inTok, output_tokens: outTok } });
-    return { runId: run.id, status: outcome.status, summary: outcome.summary };
+    await writeEvent(supabase, `pipeline.${step}`, { entityType: "pipeline_runs", entityId: runId, engagementId, details: { status: outcome.status, summary: outcome.summary, input_tokens: inTok, output_tokens: outTok } }, meta);
+    return { runId, status: outcome.status, summary: outcome.summary };
   } catch (e) {
     const message = e instanceof PipelineBlocked || e instanceof AiError || e instanceof IntegrityError ? e.message : `Unexpected error: ${(e as Error).message}`;
-    await supabase.from("pipeline_runs").update({ status: "failed", finished_at: new Date().toISOString(), error: message }).eq("id", run.id);
-    await logEvent(supabase, `pipeline.${step}.failed`, { entityType: "pipeline_runs", entityId: run.id, engagementId, details: { error: message } });
-    return { runId: run.id, status: "failed" as const, summary: message };
+    await supabase.from("pipeline_runs").update({ status: "failed", finished_at: new Date().toISOString(), error: message }).eq("id", runId);
+    await writeEvent(supabase, `pipeline.${step}.failed`, { entityType: "pipeline_runs", entityId: runId, engagementId, details: { error: message } }, meta);
+    return { runId, status: "failed" as const, summary: message };
   }
+}
+
+/** Start and finish a step within one request (hosts with long request limits, e.g. Vercel). */
+export async function runStep(supabase: SupabaseClient, engagementId: string, step: PipelineStep, actor: Profile, meta: RequestMeta) {
+  const runId = await startRun(supabase, engagementId, step);
+  return executeRun(supabase, runId, engagementId, step, actor, meta);
 }

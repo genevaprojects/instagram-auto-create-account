@@ -5,6 +5,7 @@ import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "./supabase/server";
 import type { Profile, StaffRole } from "./db-types";
+import { writeEvent, type RequestMeta } from "./audit-log";
 
 export interface Staff {
   supabase: SupabaseClient;
@@ -33,7 +34,7 @@ export function hasRole(profile: Profile, roles: StaffRole[]) {
   return roles.includes(profile.role);
 }
 
-export async function requestMeta() {
+export async function requestMeta(): Promise<RequestMeta> {
   const h = await headers();
   return {
     ip: (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || h.get("x-real-ip") || null,
@@ -47,17 +48,7 @@ export async function logEvent(
   action: string,
   opts: { entityType?: string; entityId?: string; engagementId?: string | null; details?: Record<string, unknown> } = {},
 ) {
-  const meta = await requestMeta();
-  const { error } = await supabase.rpc("log_event", {
-    p_action: action,
-    p_entity_type: opts.entityType ?? null,
-    p_entity_id: opts.entityId ?? null,
-    p_engagement: opts.engagementId ?? null,
-    p_details: opts.details ?? {},
-    p_ip: meta.ip,
-    p_ua: meta.ua,
-  });
-  if (error) throw new Error(`Audit trail write failed: ${error.message}`);
+  await writeEvent(supabase, action, opts, await requestMeta());
 }
 
 export const ROLE_LABEL: Record<StaffRole, string> = {

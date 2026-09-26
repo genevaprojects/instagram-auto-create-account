@@ -1,0 +1,18 @@
+# Netlify build for the AuditFlow platform (the Next.js app lives in audit-platform/).
+# Paths below are relative to the base directory.
+[build]
+  base    = "audit-platform"
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# The Next.js runtime (@netlify/plugin-nextjs) is detected and installed by Netlify automatically.
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # CommonJS packages that call require() at load time cannot be inlined into an ES module bundle;
+  # ship them as node_modules alongside the pipeline worker instead.
+  external_node_modules = ["xlsx", "word-extractor"]

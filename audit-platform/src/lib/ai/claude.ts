@@ -1,4 +1,4 @@
-import "server-only";
+// Server-side only: reads ANTHROPIC_API_KEY. Imported by API routes and the Netlify background function.
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { FIRM_CONSTITUTION } from "./prompts";
@@ -51,7 +51,7 @@ export function toOutputSchema(schema: z.ZodType): Record<string, unknown> {
 let client: Anthropic | null = null;
 function getClient() {
   if (!process.env.ANTHROPIC_API_KEY) {
-    throw new AiError("ANTHROPIC_API_KEY is not configured on the server. Add it in the Vercel project settings.");
+    throw new AiError("ANTHROPIC_API_KEY is not configured on the server. Add it to the hosting environment variables (Netlify or Vercel).");
   }
   client ??= new Anthropic({ maxRetries: 3, timeout: 280_000 });
   return client;

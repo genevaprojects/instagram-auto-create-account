@@ -9,6 +9,7 @@ import {
   firmMateriality, isaMateriality, suggestProfile, type MaterialityRecord, type EntityProfile,
 } from "../audit/materiality";
 import type { FsGroup } from "../audit/catalog";
+import { effectiveRun } from "./run-status";
 
 export interface EngagementSettings {
   materiality_method?: "firm" | "isa320";
@@ -154,7 +155,8 @@ export function refOrder(ref: string): number {
 }
 
 export function latestRun(b: Bundle, step: PipelineRun["step"]): PipelineRun | undefined {
-  return b.runs.find((r) => r.step === step);
+  const r = b.runs.find((x) => x.step === step);
+  return r ? effectiveRun(r) : undefined;
 }
 
 export function initialsOf(b: Bundle, id: string | null | undefined): string {

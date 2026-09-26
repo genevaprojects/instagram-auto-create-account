@@ -38,15 +38,44 @@ export function PipelineRunner({ engagementId, steps, locked }: { engagementId: 
     return () => clearInterval(i);
   }, [running]);
 
+  // A step started elsewhere (another tab or colleague) or before a reload: refresh until it ends.
+  const serverRunning = steps.some((s) => s.status === "running");
+  useEffect(() => {
+    if (running || !serverRunning) return;
+    const i = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(i);
+  }, [running, serverRunning, router]);
+
+  function show(step: string, body: { status?: string; summary?: string | null; error?: string }, httpStatus: number) {
+    const text = body.summary ?? body.error ?? `Request failed (${httpStatus}).`;
+    setMessage({ step, tone: body.status === "succeeded" ? "accent" : body.status === "needs_review" ? "warn" : "danger", text });
+  }
+
+  /** Background mode: poll the run until it leaves "running" (the server gives up after 16 minutes). */
+  async function waitFor(step: string, runId: string) {
+    const url = `/api/engagements/${engagementId}/pipeline/${step}?run=${encodeURIComponent(runId)}`;
+    for (let misses = 0; ; ) {
+      await new Promise((r) => setTimeout(r, 4000));
+      const res = await fetch(url, { cache: "no-store" }).catch(() => null);
+      if (!res || !res.ok) {
+        if (++misses >= 5) throw new Error("lost");
+        continue;
+      }
+      misses = 0;
+      const body = (await res.json()) as { status?: string; summary?: string | null };
+      if (body.status !== "running") return show(step, body, res.status);
+    }
+  }
+
   async function run(step: string) {
     setRunning(step);
     setElapsed(0);
     setMessage(null);
     try {
       const res = await fetch(`/api/engagements/${engagementId}/pipeline/${step}`, { method: "POST" });
-      const body = (await res.json().catch(() => ({}))) as { status?: string; summary?: string; error?: string };
-      const text = body.summary ?? body.error ?? `Request failed (${res.status}).`;
-      setMessage({ step, tone: body.status === "succeeded" ? "accent" : body.status === "needs_review" ? "warn" : "danger", text });
+      const body = (await res.json().catch(() => ({}))) as { status?: string; summary?: string; error?: string; runId?: string };
+      if (res.status === 202 && body.runId) await waitFor(step, body.runId);
+      else show(step, body, res.status);
     } catch {
       setMessage({ step, tone: "danger", text: "The connection dropped while the step was running. Refresh to see whether it finished." });
     } finally {
@@ -67,7 +96,7 @@ export function PipelineRunner({ engagementId, steps, locked }: { engagementId: 
               <p className="font-medium">
                 <span className="mr-2 text-ink-3 tabular-nums">{i + 1}.</span>
                 {s.title}
-                <span className="ml-3 text-sm font-normal text-ink-3">{status === "running" ? `Running… ${elapsed}s` : LABEL[status]}</span>
+                <span className="ml-3 text-sm font-normal text-ink-3">{status === "running" ? (running === s.step ? `Running… ${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : "Running") : LABEL[status]}</span>
               </p>
               <p className="mt-1 max-w-[70ch] text-sm text-ink-2">{s.description}</p>
               {s.summary && !msg ? <p className={`mt-2 max-w-[80ch] text-sm ${s.status === "failed" ? "text-danger" : "text-ink"}`}>{s.summary}</p> : null}
@@ -80,7 +109,7 @@ export function PipelineRunner({ engagementId, steps, locked }: { engagementId: 
               <button
                 type="button"
                 onClick={() => run(s.step)}
-                disabled={locked || running !== null || Boolean(s.blockedReason)}
+                disabled={locked || running !== null || serverRunning || Boolean(s.blockedReason)}
                 className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-md px-4 text-base font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${s.status === "not_run" && !s.blockedReason ? "bg-accent text-white hover:bg-accent-hover" : "border border-rule-strong bg-surface hover:bg-shelf"}`}
               >
                 {status === "running" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Play className="size-4" aria-hidden />}
